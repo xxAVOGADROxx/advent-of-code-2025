@@ -20,7 +20,7 @@ cd "$REPO_ROOT"
 # ~/.local/bin es donde viven gh, pyright, ruff, poetry, pytest, nix-portable
 [ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
 
-ALL_LANGS=(python haskell rust typescript nix)
+ALL_LANGS=(python haskell rust cpp typescript nix)
 
 # Detecta nix nativo o nix-portable (single-static-binary, no requiere /nix ni root).
 nix_cmd() {
@@ -40,6 +40,7 @@ normalize_lang() {
     py|python)     echo python ;;
     hs|haskell)    echo haskell ;;
     rs|rust)       echo rust ;;
+    cpp|c++|cc|cxx) echo cpp ;;
     ts|typescript) echo typescript ;;
     nix)           echo nix ;;
     *) echo "unknown lang: $1" >&2; exit 2 ;;
@@ -72,6 +73,15 @@ run_lang() {
     rust)
       (cd "$dir" && cargo build --release --quiet)
       "$dir/target/release/solution" < "$input"
+      ;;
+    cpp)
+      # Rebuild solo si el fuente cambió — así --benchmark mide el binario, no g++.
+      local cpp_bin="$dir/build/solution"
+      mkdir -p "$dir/build"
+      if [ ! -x "$cpp_bin" ] || [ "$dir/solution.cpp" -nt "$cpp_bin" ]; then
+        g++ -std=c++20 -O2 -o "$cpp_bin" "$dir/solution.cpp" >&2
+      fi
+      "$cpp_bin" < "$input"
       ;;
     typescript)
       (cd "$dir" && npx --yes tsx solution.ts) < "$input"
@@ -109,6 +119,7 @@ benchmark() {
           local hs_bin; hs_bin="$(cd "$base/haskell" && cabal list-bin -v0 solution)"
           cmds+=("--command-name" "haskell" "$hs_bin < $abs_input") ;;
         rust)       cmds+=("--command-name" "rust"       "$base/rust/target/release/solution < $abs_input") ;;
+        cpp)        cmds+=("--command-name" "cpp"        "$base/cpp/build/solution < $abs_input") ;;
         typescript) cmds+=("--command-name" "typescript" "npx --yes tsx $base/typescript/solution.ts < $abs_input") ;;
         nix)
           local NIX; NIX="$(nix_cmd)"

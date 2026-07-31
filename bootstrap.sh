@@ -89,6 +89,15 @@ else
   }
 fi
 
+# ---------- 3b. C++ (g++, viene con build-essential) ----------
+info "== 3b. C++ =="
+if have g++; then
+  ok "g++ $(g++ -dumpfullversion 2>/dev/null || g++ --version | head -1 | awk '{print $NF}')"
+else
+  err "g++ falta — viene en build-essential:"
+  echo "    sudo apt install -y build-essential"
+fi
+
 # ---------- 4. Node.js (nvm + LTS) ----------
 info "== 4. Node =="
 if have node; then

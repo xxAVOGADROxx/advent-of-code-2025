@@ -1,8 +1,8 @@
 # Advent of Code 2025 — Polyglot
 
-Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rust, TypeScript y Nix**, con un runner unificado que también hace benchmark.
+Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rust, C++, TypeScript y Nix**, con un runner unificado que también hace benchmark.
 
-Ejemplo de referencia funcionando en los 5 lenguajes: [`examples/fibonacci/`](examples/fibonacci/).
+Ejemplo de referencia funcionando en los 6 lenguajes: [`examples/fibonacci/`](examples/fibonacci/).
 
 ## Estructura
 
@@ -13,6 +13,7 @@ Ejemplo de referencia funcionando en los 5 lenguajes: [`examples/fibonacci/`](ex
 │   ├── python/
 │   ├── haskell/
 │   ├── rust/
+│   ├── cpp/
 │   └── typescript/
 ├── inputs/              # tus inputs personales (gitignored, AoC lo pide)
 │   ├── day01.txt
@@ -22,6 +23,7 @@ Ejemplo de referencia funcionando en los 5 lenguajes: [`examples/fibonacci/`](ex
 │   ├── python/solution.py
 │   ├── haskell/{Solution.hs, solution.cabal}
 │   ├── rust/{Cargo.toml, src/main.rs}
+│   ├── cpp/solution.cpp
 │   ├── typescript/{package.json, solution.ts}
 │   └── nix/solution.nix
 ├── day02/ ...
@@ -37,11 +39,12 @@ Ejemplo de referencia funcionando en los 5 lenguajes: [`examples/fibonacci/`](ex
 ./compile --day 1 --lang python
 ./compile --day 1 --lang haskell
 ./compile --day 1 --lang rust
+./compile --day 1 --lang cpp
 ./compile --day 1 --lang typescript
 ./compile --day 1 --lang nix
 ```
 
-Formatos abreviados aceptados: `py`, `hs`, `rs`, `ts`, `nix`.
+Formatos abreviados aceptados: `py`, `hs`, `rs`, `cpp`/`c++`/`cc`/`cxx`, `ts`, `nix`.
 
 También funciona con ejemplos (usa `examples/NAME/input.txt` como input):
 ```bash
@@ -64,7 +67,7 @@ Imprime la salida y el tiempo de cada uno, útil para verificar que todos dan la
 ```bash
 ./compile new-day 3
 ```
-Copia `template/` a `day03/` para los 4 lenguajes.
+Copia `template/` a `day03/` para los 6 lenguajes.
 
 ## Convención de I/O
 
@@ -76,7 +79,7 @@ Cada solución:
   Part 2: <respuesta>
   ```
 
-Esto permite que el runner compare y benchmark las 4 implementaciones sin fricción.
+Esto permite que el runner compare y benchmark las 6 implementaciones sin fricción.
 
 ## Setup en una máquina nueva
 
@@ -89,7 +92,7 @@ sudo apt install -y curl git pipx build-essential jq   # prerrequisitos únicos 
                                                         # ruff, pyright, poetry, pytest,
                                                         # nix-portable, gh, hyperfine
 ./bootstrap.sh --check                                  # verifica qué quedó
-./compile --example fibonacci --all                     # smoke test: los 5 lenguajes
+./compile --example fibonacci --all                     # smoke test: los 6 lenguajes
 ```
 
 Luego una única vez: `gh auth login` (para push/clone privados).
@@ -105,6 +108,7 @@ Luego una única vez: `gh auth login` (para push/clone privados).
 | pytest        | 9+                      | pipx                                           | test runner                                  |
 | GHC + cabal   | 9.6.7 + 3.14            | ghcup                                          | compilar Haskell + HLS                       |
 | rustc + cargo | 1.95+                   | rustup                                         | compilar Rust                                |
+| g++           | 13.3+                   | `build-essential` (apt)                        | compilar C++ (`-std=c++20 -O2`)              |
 | Node.js       | v22 LTS                 | nvm                                            | correr TypeScript via `tsx`                  |
 | nix-portable  | latest                  | GitHub release (binario estático)              | evalúa `.nix` sin root, sin `/nix`, sin systemd |
 | gh            | 2.65+                   | GitHub release tarball                         | crear/pushear repos                          |
@@ -114,17 +118,20 @@ Luego una única vez: `gh auth login` (para push/clone privados).
 
 ## Benchmark de referencia (Fibonacci N=50)
 
-Resultado real de `./compile --example fibonacci --benchmark` en WSL2:
+Resultado real de `./compile --example fibonacci --benchmark` (Linux nativo, Nix nativo):
 
 | Lenguaje    | Tiempo medio     | Factor vs. Rust |
 |-------------|------------------|-----------------|
-| Rust        | **646 µs**       | 1×              |
-| Python      | 6.4 ms           | 10×             |
-| Haskell     | 11.0 ms          | 17×             |
-| Nix         | 284 ms           | 440×            |
-| TypeScript  | 424 ms           | 657×            |
+| Rust        | **378 µs**       | 1×              |
+| C++         | 543 µs           | 1.44×           |
+| Haskell     | 611 µs           | 1.61×           |
+| Nix         | 9.6 ms           | 25×             |
+| Python      | 28.9 ms          | 76×             |
+| TypeScript  | 180 ms           | 476×            |
 
-*Rust gana con margen enorme (bigint compilado a machine code). TypeScript y Nix pagan el startup del intérprete/eval; para puzzles largos el startup deja de dominar.*
+*Los tres compilados (Rust, C++, Haskell) quedan en el mismo orden de magnitud — a esta escala se mide sobre todo fork+exec, no el algoritmo. TypeScript paga el startup de `tsx`/Node; para puzzles largos el startup deja de dominar.*
+
+*Los números de la corrida anterior en WSL2 (5 lenguajes, `nix-portable`) están en [`benchmarks/results.md`](benchmarks/results.md) — no son comparables con estos por hardware y por usar Nix portable en vez de nativo.*
 
 ## Reglas AoC
 
