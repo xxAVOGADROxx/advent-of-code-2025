@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# AoC 2025 polyglot runner.
-#   ./compile --day N --lang python|haskell|rust|typescript
-#   ./compile --day N --all
-#   ./compile --day N --benchmark [--lang X]
+# AoC 2025 polyglot runner (python, haskell, rust, typescript, nix).
+#   ./compile --day N       --lang python|haskell|rust|typescript|nix
+#   ./compile --day N       --all
+#   ./compile --day N       --benchmark [--lang X]
+#   ./compile --example NAM --lang X   (usa examples/NAM/ + examples/NAM/input.txt)
+#   ./compile --example NAM --all
 #   ./compile new-day N
 
 set -euo pipefail
@@ -13,8 +15,24 @@ cd "$REPO_ROOT"
 # Cargar toolchains si no están en PATH (login shells / .bashrc pueden no correr).
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
-# ghcup pone binarios en ~/.ghcup/bin
 [ -d "$HOME/.ghcup/bin" ] && export PATH="$HOME/.ghcup/bin:$PATH"
+[ -s "$HOME/.nix-profile/etc/profile.d/nix.sh" ] && . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+# ~/.local/bin es donde viven gh, pyright, ruff, poetry, pytest, nix-portable
+[ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
+
+ALL_LANGS=(python haskell rust typescript nix)
+
+# Detecta nix nativo o nix-portable (single-static-binary, no requiere /nix ni root).
+nix_cmd() {
+  if command -v nix-instantiate >/dev/null 2>&1; then
+    echo ""    # está en PATH, invocación directa
+  elif command -v nix-portable >/dev/null 2>&1; then
+    echo "nix-portable"
+  else
+    echo "✗ ni nix-instantiate ni nix-portable en PATH" >&2
+    return 1
+  fi
+}
 
 # --- lang aliases ---------------------------------------------------------
 normalize_lang() {
@@ -23,22 +41,19 @@ normalize_lang() {
     hs|haskell)    echo haskell ;;
     rs|rust)       echo rust ;;
     ts|typescript) echo typescript ;;
+    nix)           echo nix ;;
     *) echo "unknown lang: $1" >&2; exit 2 ;;
   esac
 }
 
-day_dir()   { printf "day%02d" "$1"; }
-input_file(){ printf "inputs/day%02d.txt" "$1"; }
-
-# --- run a single (day, lang) --------------------------------------------
-run_solution() {
-  local day="$1" lang="$2"
-  local dir="$(day_dir "$day")/$lang"
-  local input="$(input_file "$day")"
+# --- run one lang inside a target dir ------------------------------------
+# args: <base_dir> <lang> <input_file>
+run_lang() {
+  local base="$1" lang="$2" input="$3"
+  local dir="$base/$lang"
 
   if [ ! -d "$dir" ]; then
-    echo "✗ $dir no existe. Crea el día con: ./compile new-day $day" >&2
-    return 1
+    echo "✗ $dir no existe" >&2; return 1
   fi
   if [ ! -f "$input" ]; then
     echo "⚠ $input no existe — pasando input vacío (STDIN cerrado)" >&2
@@ -50,10 +65,8 @@ run_solution() {
       python3 "$dir/solution.py" < "$input"
       ;;
     haskell)
-      # cabal maneja cache y recompilación automáticamente
       (cd "$dir" && cabal build -v0 solution) >&2
-      local bin
-      bin="$(cd "$dir" && cabal list-bin -v0 solution)"
+      local bin; bin="$(cd "$dir" && cabal list-bin -v0 solution)"
       "$bin" < "$input"
       ;;
     rust)
@@ -63,31 +76,43 @@ run_solution() {
     typescript)
       (cd "$dir" && npx --yes tsx solution.ts) < "$input"
       ;;
+    nix)
+      # Nix no tiene stdin — pasamos el input path como argumento.
+      # `--json` envuelve el string en JSON; `jq -r` lo desempaqueta a texto crudo.
+      local abs_input; abs_input="$(readlink -f "$input")"
+      local NIX; NIX="$(nix_cmd)"
+      (cd "$dir" && $NIX nix-instantiate --eval --strict \
+        --argstr inputPath "$abs_input" --json solution.nix) | jq -r .
+      ;;
   esac
 }
 
-# --- benchmark ------------------------------------------------------------
+# --- benchmark: usa hyperfine si está, si no `time` ----------------------
+# args: <base_dir> <input_file> <lang>...
 benchmark() {
-  local day="$1" langs=("${@:2}")
-  local input="$(input_file "$day")"
+  local base="$1" input="$2"; shift 2
+  local langs=("$@")
 
-  # Pre-warm builds
   for lang in "${langs[@]}"; do
     echo "→ pre-build $lang"
-    run_solution "$day" "$lang" > /dev/null 2>&1 || true
+    run_lang "$base" "$lang" "$input" > /dev/null 2>&1 || true
   done
+
+  local abs_input; abs_input="$(readlink -f "$input")"
 
   if command -v hyperfine >/dev/null; then
     local cmds=()
     for lang in "${langs[@]}"; do
       case "$lang" in
-        python)     cmds+=("--command-name" "python"     "python3 $(day_dir "$day")/python/solution.py < $input") ;;
+        python)     cmds+=("--command-name" "python"     "python3 $base/python/solution.py < $abs_input") ;;
         haskell)
-          local hs_bin
-          hs_bin="$(cd "$(day_dir "$day")/haskell" && cabal list-bin -v0 solution)"
-          cmds+=("--command-name" "haskell" "$hs_bin < $input") ;;
-        rust)       cmds+=("--command-name" "rust"       "$(day_dir "$day")/rust/target/release/solution < $input") ;;
-        typescript) cmds+=("--command-name" "typescript" "npx --yes tsx $(day_dir "$day")/typescript/solution.ts < $input") ;;
+          local hs_bin; hs_bin="$(cd "$base/haskell" && cabal list-bin -v0 solution)"
+          cmds+=("--command-name" "haskell" "$hs_bin < $abs_input") ;;
+        rust)       cmds+=("--command-name" "rust"       "$base/rust/target/release/solution < $abs_input") ;;
+        typescript) cmds+=("--command-name" "typescript" "npx --yes tsx $base/typescript/solution.ts < $abs_input") ;;
+        nix)
+          local NIX; NIX="$(nix_cmd)"
+          cmds+=("--command-name" "nix" "$NIX nix-instantiate --eval --strict --argstr inputPath $abs_input --json $base/nix/solution.nix | jq -r .") ;;
       esac
     done
     hyperfine --warmup 2 --shell=bash "${cmds[@]}"
@@ -96,7 +121,7 @@ benchmark() {
     echo "Instala con: cargo install hyperfine"
     for lang in "${langs[@]}"; do
       echo "--- $lang ---"
-      { time run_solution "$day" "$lang" >/dev/null ; } 2>&1 | grep real
+      { time run_lang "$base" "$lang" "$input" >/dev/null ; } 2>&1 | grep real
     done
   fi
 }
@@ -104,37 +129,28 @@ benchmark() {
 # --- new-day: copia template ---------------------------------------------
 new_day() {
   local day="$1"
-  local dir="$(day_dir "$day")"
+  local dir; dir="$(printf "day%02d" "$day")"
   if [ -d "$dir" ]; then
     echo "✗ $dir ya existe" >&2; exit 1
   fi
   cp -r template "$dir"
-
-  # Rust: ajustar el nombre del paquete
-  sed -i "s/^name = \"solution\"/name = \"solution\"/" "$dir/rust/Cargo.toml" || true
-
-  # TS: package.json name
   sed -i "s/\"aoc-template\"/\"aoc-$(printf "day%02d" "$day")\"/" "$dir/typescript/package.json" || true
-
-  # crear input vacío para no ensuciar el runner
-  touch "$(input_file "$day")"
-
-  echo "✓ $dir listo. Pega tu input en $(input_file "$day")"
+  touch "$(printf "inputs/day%02d.txt" "$day")"
+  echo "✓ $dir listo. Pega tu input en $(printf "inputs/day%02d.txt" "$day")"
 }
 
-# --- CLI parse ------------------------------------------------------------
-if [ $# -eq 0 ]; then
-  sed -n '2,7p' "$0" | sed 's/^# //'
-  exit 0
-fi
+# --- CLI ------------------------------------------------------------------
+usage() { sed -n '2,10p' "$0" | sed 's/^# //'; }
+
+[ $# -eq 0 ] && { usage; exit 0; }
 
 if [ "$1" = "new-day" ]; then
   [ -z "${2:-}" ] && { echo "uso: $0 new-day N"; exit 2; }
-  new_day "$2"
-  exit 0
+  new_day "$2"; exit 0
 fi
 
 DAY=""
+EXAMPLE=""
 LANG=""
 ALL=false
 BENCH=false
@@ -142,23 +158,32 @@ BENCH=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --day)       DAY="$2"; shift 2 ;;
+    --example)   EXAMPLE="$2"; shift 2 ;;
     --lang)      LANG="$(normalize_lang "$2")"; shift 2 ;;
     --all)       ALL=true; shift ;;
     --benchmark) BENCH=true; shift ;;
-    -h|--help)   sed -n '2,7p' "$0" | sed 's/^# //'; exit 0 ;;
+    -h|--help)   usage; exit 0 ;;
     *) echo "flag desconocida: $1" >&2; exit 2 ;;
   esac
 done
 
-[ -z "$DAY" ] && { echo "falta --day N" >&2; exit 2; }
-
-ALL_LANGS=(python haskell rust typescript)
+# resolver base + input
+if [ -n "$EXAMPLE" ]; then
+  BASE="examples/$EXAMPLE"
+  INPUT="examples/$EXAMPLE/input.txt"
+  [ -d "$BASE" ] || { echo "✗ $BASE no existe" >&2; exit 1; }
+elif [ -n "$DAY" ]; then
+  BASE="$(printf "day%02d" "$DAY")"
+  INPUT="$(printf "inputs/day%02d.txt" "$DAY")"
+else
+  echo "falta --day N o --example NAME" >&2; exit 2
+fi
 
 if $BENCH; then
   if $ALL || [ -z "$LANG" ]; then
-    benchmark "$DAY" "${ALL_LANGS[@]}"
+    benchmark "$BASE" "$INPUT" "${ALL_LANGS[@]}"
   else
-    benchmark "$DAY" "$LANG"
+    benchmark "$BASE" "$INPUT" "$LANG"
   fi
   exit 0
 fi
@@ -166,10 +191,10 @@ fi
 if $ALL; then
   for lang in "${ALL_LANGS[@]}"; do
     echo "═══ $lang ═══"
-    run_solution "$DAY" "$lang"
+    run_lang "$BASE" "$lang" "$INPUT" || true
     echo
   done
 else
   [ -z "$LANG" ] && { echo "falta --lang X (o usa --all)" >&2; exit 2; }
-  run_solution "$DAY" "$LANG"
+  run_lang "$BASE" "$LANG" "$INPUT"
 fi

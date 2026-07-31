@@ -1,6 +1,8 @@
 # Advent of Code 2025 — Polyglot
 
-Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rust y TypeScript**, con un runner unificado que también hace benchmark.
+Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rust, TypeScript y Nix**, con un runner unificado que también hace benchmark.
+
+Ejemplo de referencia funcionando en los 5 lenguajes: [`examples/fibonacci/`](examples/fibonacci/).
 
 ## Estructura
 
@@ -18,10 +20,13 @@ Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rus
 │   └── ...
 ├── day01/
 │   ├── python/solution.py
-│   ├── haskell/Solution.hs
+│   ├── haskell/{Solution.hs, solution.cabal}
 │   ├── rust/{Cargo.toml, src/main.rs}
-│   └── typescript/{package.json, solution.ts}
+│   ├── typescript/{package.json, solution.ts}
+│   └── nix/solution.nix
 ├── day02/ ...
+├── examples/
+│   └── fibonacci/          # demo: mismo algoritmo en los 5 lenguajes
 └── benchmarks/results.md
 ```
 
@@ -33,9 +38,15 @@ Soluciones a [AoC 2025](https://adventofcode.com/2025) en **Python, Haskell, Rus
 ./compile --day 1 --lang haskell
 ./compile --day 1 --lang rust
 ./compile --day 1 --lang typescript
+./compile --day 1 --lang nix
 ```
 
-Formatos abreviados aceptados: `py`, `hs`, `rs`, `ts`.
+Formatos abreviados aceptados: `py`, `hs`, `rs`, `ts`, `nix`.
+
+También funciona con ejemplos (usa `examples/NAME/input.txt` como input):
+```bash
+./compile --example fibonacci --all
+```
 
 ### Correr todos los lenguajes de un día
 ```bash
@@ -69,13 +80,16 @@ Esto permite que el runner compare y benchmark las 4 implementaciones sin fricci
 
 ## Requerimientos
 
-| Lenguaje    | Versión probada     | Instalación                  |
-|-------------|---------------------|------------------------------|
-| Python      | 3.11+               | pyenv                        |
-| Haskell     | GHC 9.6+            | ghcup                        |
-| Rust        | 1.75+ (edition 2024)| rustup                       |
-| TypeScript  | Node 22 + tsx       | `npm i -g tsx typescript`    |
-| Benchmark   | hyperfine (opcional)| `cargo install hyperfine`    |
+| Lenguaje    | Versión probada         | Instalación                                    |
+|-------------|-------------------------|------------------------------------------------|
+| Python      | 3.11+                   | pyenv                                          |
+| Haskell     | GHC 9.6 + cabal 3.0+    | ghcup                                          |
+| Rust        | 1.75+ (edition 2021)    | rustup                                         |
+| TypeScript  | Node 22 + tsx           | `npm i -g tsx typescript`                      |
+| Nix         | nix 2.20+ o nix-portable| [nix-portable](https://github.com/DavHau/nix-portable) (binario estático, sin root, sin `/nix`) |
+| Benchmark   | hyperfine (opcional)    | `cargo install hyperfine`                      |
+
+**Nix sin root en WSL/Windows:** `curl -L https://github.com/DavHau/nix-portable/releases/latest/download/nix-portable-x86_64 -o ~/.local/bin/nix-portable && chmod +x ~/.local/bin/nix-portable`. El runner lo detecta automáticamente si `nix-instantiate` no está en PATH.
 
 ## Reglas AoC
 
