@@ -1,19 +1,19 @@
 module Main where
 
-import Data.List (lines)
+import           Data.List
 
 parse :: String -> [String]
 parse = lines
 
-part1 :: [String] -> String
-part1 _ = "TODO"
+part1 :: [String] -> Int
+part1 _ = 0  -- TODO
 
-part2 :: [String] -> String
-part2 _ = "TODO"
+part2 :: [String] -> Int
+part2 _ = 0  -- TODO
 
 main :: IO ()
-main = do
-  input <- getContents
-  let d = parse input
-  putStrLn $ "Part 1: " ++ part1 d
-  putStrLn $ "Part 2: " ++ part2 d
+main = interact $ \raw ->
+  let d = parse raw
+  in unlines [ "Part 1: " ++ show (part1 d)
+             , "Part 2: " ++ show (part2 d)
+             ]

@@ -50,12 +50,10 @@ run_solution() {
       python3 "$dir/solution.py" < "$input"
       ;;
     haskell)
-      # Compila si el binario no existe o el .hs es más nuevo
-      local bin="$dir/.build/solution"
-      mkdir -p "$dir/.build"
-      if [ ! -x "$bin" ] || [ "$dir/Solution.hs" -nt "$bin" ]; then
-        (cd "$dir" && ghc -O2 -outputdir .build -o .build/solution Solution.hs >/dev/null)
-      fi
+      # cabal maneja cache y recompilación automáticamente
+      (cd "$dir" && cabal build -v0 solution) >&2
+      local bin
+      bin="$(cd "$dir" && cabal list-bin -v0 solution)"
       "$bin" < "$input"
       ;;
     rust)
@@ -84,7 +82,10 @@ benchmark() {
     for lang in "${langs[@]}"; do
       case "$lang" in
         python)     cmds+=("--command-name" "python"     "python3 $(day_dir "$day")/python/solution.py < $input") ;;
-        haskell)    cmds+=("--command-name" "haskell"    "$(day_dir "$day")/haskell/.build/solution < $input") ;;
+        haskell)
+          local hs_bin
+          hs_bin="$(cd "$(day_dir "$day")/haskell" && cabal list-bin -v0 solution)"
+          cmds+=("--command-name" "haskell" "$hs_bin < $input") ;;
         rust)       cmds+=("--command-name" "rust"       "$(day_dir "$day")/rust/target/release/solution < $input") ;;
         typescript) cmds+=("--command-name" "typescript" "npx --yes tsx $(day_dir "$day")/typescript/solution.ts < $input") ;;
       esac
