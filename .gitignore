@@ -1,0 +1,44 @@
+# AoC rule: inputs son personales, nunca commitear
+inputs/*
+!inputs/.gitkeep
+!inputs/example*.txt
+
+# Rust
+target/
+Cargo.lock
+
+# Haskell
+dist-newstyle/
+.stack-work/
+.build/
+*.hi
+*.o
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# TypeScript / Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Direnv
+.envrc
+.direnv/

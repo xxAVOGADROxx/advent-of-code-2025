@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# AoC 2025 polyglot runner.
+#   ./compile --day N --lang python|haskell|rust|typescript
+#   ./compile --day N --all
+#   ./compile --day N --benchmark [--lang X]
+#   ./compile new-day N
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT"
+
+# Cargar toolchains si no están en PATH (login shells / .bashrc pueden no correr).
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+# ghcup pone binarios en ~/.ghcup/bin
+[ -d "$HOME/.ghcup/bin" ] && export PATH="$HOME/.ghcup/bin:$PATH"
+
+# --- lang aliases ---------------------------------------------------------
+normalize_lang() {
+  case "$1" in
+    py|python)     echo python ;;
+    hs|haskell)    echo haskell ;;
+    rs|rust)       echo rust ;;
+    ts|typescript) echo typescript ;;
+    *) echo "unknown lang: $1" >&2; exit 2 ;;
+  esac
+}
+
+day_dir()   { printf "day%02d" "$1"; }
+input_file(){ printf "inputs/day%02d.txt" "$1"; }
+
+# --- run a single (day, lang) --------------------------------------------
+run_solution() {
+  local day="$1" lang="$2"
+  local dir="$(day_dir "$day")/$lang"
+  local input="$(input_file "$day")"
+
+  if [ ! -d "$dir" ]; then
+    echo "✗ $dir no existe. Crea el día con: ./compile new-day $day" >&2
+    return 1
+  fi
+  if [ ! -f "$input" ]; then
+    echo "⚠ $input no existe — pasando input vacío (STDIN cerrado)" >&2
+    input=/dev/null
+  fi
+
+  case "$lang" in
+    python)
+      python3 "$dir/solution.py" < "$input"
+      ;;
+    haskell)
+      # Compila si el binario no existe o el .hs es más nuevo
+      local bin="$dir/.build/solution"
+      mkdir -p "$dir/.build"
+      if [ ! -x "$bin" ] || [ "$dir/Solution.hs" -nt "$bin" ]; then
+        (cd "$dir" && ghc -O2 -outputdir .build -o .build/solution Solution.hs >/dev/null)
+      fi
+      "$bin" < "$input"
+      ;;
+    rust)
+      (cd "$dir" && cargo build --release --quiet)
+      "$dir/target/release/solution" < "$input"
+      ;;
+    typescript)
+      (cd "$dir" && npx --yes tsx solution.ts) < "$input"
+      ;;
+  esac
+}
+
+# --- benchmark ------------------------------------------------------------
+benchmark() {
+  local day="$1" langs=("${@:2}")
+  local input="$(input_file "$day")"
+
+  # Pre-warm builds
+  for lang in "${langs[@]}"; do
+    echo "→ pre-build $lang"
+    run_solution "$day" "$lang" > /dev/null 2>&1 || true
+  done
+
+  if command -v hyperfine >/dev/null; then
+    local cmds=()
+    for lang in "${langs[@]}"; do
+      case "$lang" in
+        python)     cmds+=("--command-name" "python"     "python3 $(day_dir "$day")/python/solution.py < $input") ;;
+        haskell)    cmds+=("--command-name" "haskell"    "$(day_dir "$day")/haskell/.build/solution < $input") ;;
+        rust)       cmds+=("--command-name" "rust"       "$(day_dir "$day")/rust/target/release/solution < $input") ;;
+        typescript) cmds+=("--command-name" "typescript" "npx --yes tsx $(day_dir "$day")/typescript/solution.ts < $input") ;;
+      esac
+    done
+    hyperfine --warmup 2 --shell=bash "${cmds[@]}"
+  else
+    echo "hyperfine no encontrado — usando 'time' (menos preciso)"
+    echo "Instala con: cargo install hyperfine"
+    for lang in "${langs[@]}"; do
+      echo "--- $lang ---"
+      { time run_solution "$day" "$lang" >/dev/null ; } 2>&1 | grep real
+    done
+  fi
+}
+
+# --- new-day: copia template ---------------------------------------------
+new_day() {
+  local day="$1"
+  local dir="$(day_dir "$day")"
+  if [ -d "$dir" ]; then
+    echo "✗ $dir ya existe" >&2; exit 1
+  fi
+  cp -r template "$dir"
+
+  # Rust: ajustar el nombre del paquete
+  sed -i "s/^name = \"solution\"/name = \"solution\"/" "$dir/rust/Cargo.toml" || true
+
+  # TS: package.json name
+  sed -i "s/\"aoc-template\"/\"aoc-$(printf "day%02d" "$day")\"/" "$dir/typescript/package.json" || true
+
+  # crear input vacío para no ensuciar el runner
+  touch "$(input_file "$day")"
+
+  echo "✓ $dir listo. Pega tu input en $(input_file "$day")"
+}
+
+# --- CLI parse ------------------------------------------------------------
+if [ $# -eq 0 ]; then
+  sed -n '2,7p' "$0" | sed 's/^# //'
+  exit 0
+fi
+
+if [ "$1" = "new-day" ]; then
+  [ -z "${2:-}" ] && { echo "uso: $0 new-day N"; exit 2; }
+  new_day "$2"
+  exit 0
+fi
+
+DAY=""
+LANG=""
+ALL=false
+BENCH=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --day)       DAY="$2"; shift 2 ;;
+    --lang)      LANG="$(normalize_lang "$2")"; shift 2 ;;
+    --all)       ALL=true; shift ;;
+    --benchmark) BENCH=true; shift ;;
+    -h|--help)   sed -n '2,7p' "$0" | sed 's/^# //'; exit 0 ;;
+    *) echo "flag desconocida: $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -z "$DAY" ] && { echo "falta --day N" >&2; exit 2; }
+
+ALL_LANGS=(python haskell rust typescript)
+
+if $BENCH; then
+  if $ALL || [ -z "$LANG" ]; then
+    benchmark "$DAY" "${ALL_LANGS[@]}"
+  else
+    benchmark "$DAY" "$LANG"
+  fi
+  exit 0
+fi
+
+if $ALL; then
+  for lang in "${ALL_LANGS[@]}"; do
+    echo "═══ $lang ═══"
+    run_solution "$DAY" "$lang"
+    echo
+  done
+else
+  [ -z "$LANG" ] && { echo "falta --lang X (o usa --all)" >&2; exit 2; }
+  run_solution "$DAY" "$LANG"
+fi
