@@ -15,7 +15,10 @@ CHECK_ONLY=false
 # Source de toolchains en ubicaciones conocidas (mismo patrón que ./compile).
 # Sin esto, --check reporta "falta" cuando en realidad están en ~/.cargo, ~/.ghcup, ~/.nvm.
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+# nvm vive en ~/.nvm por defecto, pero también es común ~/.config/nvm (XDG).
+for _nvm_dir in "${NVM_DIR:-}" "$HOME/.nvm" "$HOME/.config/nvm"; do
+  [ -n "$_nvm_dir" ] && [ -s "$_nvm_dir/nvm.sh" ] && { . "$_nvm_dir/nvm.sh" >/dev/null 2>&1; break; }
+done
 [ -d "$HOME/.ghcup/bin" ] && export PATH="$HOME/.ghcup/bin:$PATH"
 [ -d "$HOME/.local/bin" ] && export PATH="$HOME/.local/bin:$PATH"
 
@@ -104,7 +107,7 @@ if have node; then
   ok "node $(node --version)"
 else
   $CHECK_ONLY && warn "node falta" || {
-    export NVM_DIR="$HOME/.nvm"
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
     if [ ! -d "$NVM_DIR" ]; then
       curl -sSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
     fi
@@ -200,13 +203,20 @@ info "== resumen =="
 if $CHECK_ONLY; then
   echo "Corre sin --check para instalar lo que falte."
 else
+  # El rc depende del shell del usuario, no del que corre este script.
+  case "$(basename "${SHELL:-bash}")" in
+    zsh)  rc_file="~/.zshrc"  ;;
+    fish) rc_file="~/.config/fish/config.fish (sintaxis distinta, adapta)" ;;
+    *)    rc_file="~/.bashrc" ;;
+  esac
+  echo
+  echo "✓ Bootstrap completo. Añade a $rc_file si no está ya:"
   cat <<'EOF'
-
-✓ Bootstrap completo. Añade a ~/.bashrc si no está ya:
 
     export PATH="$HOME/.local/bin:$PATH"
     [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-    [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"   # o ~/.config/nvm si lo instalaste ahí
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
     [ -d "$HOME/.ghcup/bin" ] && export PATH="$HOME/.ghcup/bin:$PATH"
 
 Verifica todo con:

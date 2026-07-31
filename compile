@@ -14,7 +14,10 @@ cd "$REPO_ROOT"
 
 # Cargar toolchains si no están en PATH (login shells / .bashrc pueden no correr).
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1
+# nvm vive en ~/.nvm por defecto, pero también es común ~/.config/nvm (XDG).
+for _nvm_dir in "${NVM_DIR:-}" "$HOME/.nvm" "$HOME/.config/nvm"; do
+  [ -n "$_nvm_dir" ] && [ -s "$_nvm_dir/nvm.sh" ] && { . "$_nvm_dir/nvm.sh" >/dev/null 2>&1; break; }
+done
 [ -d "$HOME/.ghcup/bin" ] && export PATH="$HOME/.ghcup/bin:$PATH"
 [ -s "$HOME/.nix-profile/etc/profile.d/nix.sh" ] && . "$HOME/.nix-profile/etc/profile.d/nix.sh"
 # ~/.local/bin es donde viven gh, pyright, ruff, poetry, pytest, nix-portable
