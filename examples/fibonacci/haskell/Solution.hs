@@ -12,7 +12,7 @@ fibSum n = sum (map fib [0 .. n])
 
 main :: IO ()
 main = interact $ \raw ->
-  let n = read (head (lines raw)) :: Int
+  let n = read . head . lines $ raw :: Int
   in unlines [ "Part 1: " ++ show (fib n)
              , "Part 2: " ++ show (fibSum n)
              ]
