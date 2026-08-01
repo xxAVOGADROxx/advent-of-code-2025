@@ -12,7 +12,12 @@ fibSum n = sum (map fib [0 .. n])
 
 main :: IO ()
 main = interact $ \raw ->
-  let n = read . head . lines $ raw :: Int
-  in unlines [ "Part 1: " ++ show (fib n)
-             , "Part 2: " ++ show (fibSum n)
-             ]
+  -- pattern match en vez de 'head': head es parcial y GHC avisa (-Wx-partial).
+  -- Como interact espera un String, el caso vacio devuelve un mensaje normal.
+  case lines raw of
+    [] -> "error: input vacio\n"
+    (l:_) ->
+      let n = read l :: Int
+      in unlines [ "Part 1: " ++ show (fib n)
+                 , "Part 2: " ++ show (fibSum n)
+                 ]
